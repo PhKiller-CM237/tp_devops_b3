@@ -1,0 +1,480 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "odoo",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": {
+          "matchLabels": {
+            "app": "odoo"
+          }
+        },
+        "strategy": {
+          "type": "RollingUpdate",
+          "rollingUpdate": {
+            "maxUnavailable": 0,
+            "maxSurge": 1
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "odoo",
+              "env": "prod"
+            }
+          },
+          "spec": {
+            "terminationGracePeriodSeconds": 45,
+            "containers": [
+              {
+                "name": "odoo",
+                "image": "odoo:18.0",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 8069
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "HOST",
+                    "value": "postgres"
+                  },
+                  {
+                    "name": "USER",
+                    "value": "odoo"
+                  },
+                  {
+                    "name": "PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "icgroup-secrets",
+                        "key": "postgres-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "ODOO_ADMIN_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "icgroup-secrets",
+                        "key": "odoo-admin-password"
+                      }
+                    }
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "192Mi"
+                  },
+                  "limits": {
+                    "cpu": "700m",
+                    "memory": "640Mi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/odoo"
+                  },
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/odoo/odoo.conf",
+                    "subPath": "odoo.conf",
+                    "readOnly": true
+                  }
+                ],
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 8069
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/web/login",
+                    "port": 8069
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5
+                },
+                "livenessProbe": {
+                  "tcpSocket": {
+                    "port": 8069
+                  },
+                  "periodSeconds": 15
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "odoo-data"
+                }
+              },
+              {
+                "name": "config",
+                "secret": {
+                  "secretName": "icgroup-secrets",
+                  "items": [
+                    {
+                      "key": "odoo.conf",
+                      "path": "odoo.conf"
+                    }
+                  ]
+                }
+              }
+            ],
+            "initContainers": [
+              {
+                "name": "volume-owner",
+                "image": "busybox:1.36",
+                "command": [
+                  "sh",
+                  "-c",
+                  "chown -R 100:101 /var/lib/odoo"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/odoo"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "odoo",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "selector": {
+          "app": "odoo"
+        },
+        "ports": [
+          {
+            "port": 8069,
+            "targetPort": 8069,
+            "nodePort": 31669
+          }
+        ],
+        "type": "NodePort"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "pgadmin",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "pgadmin"
+          }
+        },
+        "strategy": {
+          "type": "Recreate"
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "pgadmin",
+              "env": "prod"
+            }
+          },
+          "spec": {
+            "terminationGracePeriodSeconds": 45,
+            "containers": [
+              {
+                "name": "pgadmin",
+                "image": "dpage/pgadmin4:9.19",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PGADMIN_DEFAULT_EMAIL",
+                    "value": "admin@example.com"
+                  },
+                  {
+                    "name": "PGADMIN_DEFAULT_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "icgroup-secrets",
+                        "key": "pgadmin-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "PGADMIN_DISABLE_POSTFIX",
+                    "value": "1"
+                  },
+                  {
+                    "name": "PGADMIN_REPLACE_SERVERS_ON_STARTUP",
+                    "value": "True"
+                  },
+                  {
+                    "name": "PGPASS_FILE",
+                    "value": "/run/secrets/pgpass"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "500m",
+                    "memory": "384Mi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/pgadmin"
+                  },
+                  {
+                    "name": "servers",
+                    "mountPath": "/pgadmin4/servers.json",
+                    "subPath": "servers.json",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "secret",
+                    "mountPath": "/run/secrets",
+                    "readOnly": true
+                  }
+                ],
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/misc/ping",
+                    "port": 80
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 90
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/misc/ping",
+                    "port": 80
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "pgadmin-data"
+                }
+              },
+              {
+                "name": "servers",
+                "configMap": {
+                  "name": "pgadmin-servers",
+                  "items": [
+                    {
+                      "key": "servers.json",
+                      "path": "servers.json"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "secret",
+                "secret": {
+                  "secretName": "icgroup-secrets",
+                  "items": [
+                    {
+                      "key": "pgpass",
+                      "path": "pgpass"
+                    }
+                  ]
+                }
+              }
+            ],
+            "initContainers": [
+              {
+                "name": "volume-owner",
+                "image": "busybox:1.36",
+                "command": [
+                  "sh",
+                  "-c",
+                  "chown -R 5050:0 /var/lib/pgadmin"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/pgadmin"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "pgadmin",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "selector": {
+          "app": "pgadmin"
+        },
+        "ports": [
+          {
+            "port": 80,
+            "targetPort": 80,
+            "nodePort": 31550
+          }
+        ],
+        "type": "NodePort"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "ic-webapp",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": {
+          "matchLabels": {
+            "app": "ic-webapp"
+          }
+        },
+        "strategy": {
+          "type": "RollingUpdate",
+          "rollingUpdate": {
+            "maxUnavailable": 0,
+            "maxSurge": 1
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "ic-webapp",
+              "env": "prod"
+            }
+          },
+          "spec": {
+            "terminationGracePeriodSeconds": 45,
+            "containers": [
+              {
+                "name": "ic-webapp",
+                "image": "legeni-academy:1.0",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 8080
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "ODOO_URL",
+                    "value": "http://localhost:8069"
+                  },
+                  {
+                    "name": "PGADMIN_URL",
+                    "value": "http://localhost:5050"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "50m",
+                    "memory": "64Mi"
+                  },
+                  "limits": {
+                    "cpu": "300m",
+                    "memory": "192Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080
+                  },
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 3
+                }
+              }
+            ],
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "ic-webapp",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "selector": {
+          "app": "ic-webapp"
+        },
+        "ports": [
+          {
+            "port": 8080,
+            "targetPort": 8080,
+            "nodePort": 31995
+          }
+        ],
+        "type": "NodePort"
+      }
+    }
+  ]
+}

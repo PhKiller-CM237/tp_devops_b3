@@ -1,0 +1,12 @@
+[options]
+admin_passwd = {{ vault_odoo_master_password }}
+db_host = {{ postgres_service_name }}
+db_port = 5432
+db_user = odoo
+db_password = {{ vault_postgres_password }}
+db_name = legeni
+dbfilter = ^legeni$
+list_db = False
+data_dir = /var/lib/odoo
+workers = 0
+max_cron_threads = 1

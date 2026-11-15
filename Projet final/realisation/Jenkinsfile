@@ -1,0 +1,123 @@
+pipeline {
+    agent any
+    parameters {
+        choice(name: 'TARGET', choices: ['docker', 'kubernetes'], description: 'Phase du projet final')
+        booleanParam(name: 'PUBLISH', defaultValue: false, description: 'Publier Docker Hub si dockerhub est configure')
+        string(name: 'DOCKERHUB_ID', defaultValue: '', description: 'Compte Docker Hub')
+    }
+    environment {
+        IMAGE = 'legeni-academy'
+        TEST_CONTAINER = "icgroup-test-$BUILD_NUMBER"
+    }
+    options { timestamps(); disableConcurrentBuilds(); timeout(time: 90, unit: 'MINUTES') }
+    triggers { githubPush() }
+    stages {
+        stage('Lire releases.txt') {
+            steps {
+                dir('Projet final/realisation') {
+                    script {
+                        def release = readFile('releases.txt').readLines().findAll { it.trim() }.collectEntries {
+                            def fields = it.trim().split(/\s+/, 2)
+                            if (fields.size() != 2) { error('releases.txt invalide') }
+                            [(fields[0]): fields[1]]
+                        }
+                        if (release.size()!=3 || !(release.VERSION ==~ /\d+\.\d+(\.\d+)?/)) { error('Version invalide') }
+                        env.RELEASE_VERSION = release.VERSION
+                        env.ODOO_URL = release.ODOO_URL
+                        env.PGADMIN_URL = release.PGADMIN_URL
+                    }
+                    sh 'cp releases.txt portal/releases.txt; mkdir -p reports'
+                }
+            }
+        }
+        stage('Tests du portail') {
+            steps {
+                dir('Projet final/realisation') {
+                    sh '''#!/bin/bash
+set -euo pipefail
+docker build --target test -t legeni-academy:test portal
+cid=$(docker create legeni-academy:test)
+trap 'docker rm "$cid" >/dev/null' EXIT
+docker cp "$cid:/opt/reports/." reports/
+'''
+                }
+            }
+        }
+        stage('Build et acceptance') {
+            steps {
+                dir('Projet final/realisation') {
+                    sh '''#!/bin/bash
+set -euo pipefail
+docker build --build-arg APP_VERSION="$RELEASE_VERSION" --label org.opencontainers.image.revision="$GIT_COMMIT" -t "$IMAGE:$RELEASE_VERSION" portal
+docker run -d --name "$TEST_CONTAINER" "$IMAGE:$RELEASE_VERSION"
+for i in $(seq 1 30); do
+ if docker exec "$TEST_CONTAINER" python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"; then break; fi
+ sleep 1
+done
+docker exec "$TEST_CONTAINER" python -c "import urllib.request,json; d=json.load(urllib.request.urlopen('http://localhost:8080/api/info')); assert d['version']=='$RELEASE_VERSION',d"
+docker exec "$TEST_CONTAINER" python -c "import urllib.request; b=urllib.request.urlopen('http://localhost:8080/').read().decode(); assert '$ODOO_URL' in b and '$PGADMIN_URL' in b"
+printf '%s\\n' "$IMAGE:$RELEASE_VERSION" > reports/image.txt
+'''
+                }
+            }
+        }
+        stage('Publication Docker Hub') {
+            when { expression { params.PUBLISH } }
+            steps {
+                script { if (!params.DOCKERHUB_ID?.trim()) { error('DOCKERHUB_ID requis') } }
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
+                    sh '''#!/bin/bash
+set -euo pipefail
+export DOCKER_CONFIG="$WORKSPACE/.docker-icgroup"
+trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+printf '%s' "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+docker tag "$IMAGE:$RELEASE_VERSION" "$DOCKERHUB_ID/$IMAGE:$RELEASE_VERSION"
+docker push "$DOCKERHUB_ID/$IMAGE:$RELEASE_VERSION"
+'''
+                }
+            }
+        }
+        stage('Deploiement trois serveurs') {
+            when { expression { params.TARGET == 'docker' } }
+            steps {
+                withCredentials([file(credentialsId: 'ansible-vault-pass', variable: 'VAULT_PASS'), file(credentialsId: 'ansible-ssh-key', variable: 'SSH_PRIVATE_KEY')]) {
+                    dir('Projet final/realisation/ansible') {
+                        sh '''#!/bin/bash
+set -euo pipefail
+for node in tp-ansible-web1-1 tp-ansible-db1-1; do
+ if [ "$(docker inspect -f '{{.State.Running}}' "$node")" != true ]; then docker start "$node" >/dev/null; fi
+done
+docker network connect tp-ansible_default jenkins 2>/dev/null || true
+ansible managed -b -m command -a "docker info" --private-key "$SSH_PRIVATE_KEY"
+ansible-playbook load-images.yml --private-key "$SSH_PRIVATE_KEY" -e portal_version="$RELEASE_VERSION"
+ansible-playbook deploy-docker.yml --private-key "$SSH_PRIVATE_KEY" --vault-password-file "$VAULT_PASS" -e portal_version="$RELEASE_VERSION" -e odoo_url="$ODOO_URL" -e pgadmin_url="$PGADMIN_URL"
+ansible-playbook gateway.yml -e target=docker
+'''
+                    }
+                }
+            }
+        }
+        stage('Deploiement Kubernetes icgroup') {
+            when { expression { params.TARGET == 'kubernetes' } }
+            steps {
+                withCredentials([file(credentialsId: 'ansible-vault-pass', variable: 'VAULT_PASS'), file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    dir('Projet final/realisation/ansible') {
+                        sh '''#!/bin/bash
+set -euo pipefail
+docker save --platform linux/amd64 odoo:18.0 dpage/pgadmin4:9.19 postgres:16-alpine "$IMAGE:$RELEASE_VERSION" | gzip -1 | docker exec -i minikube sh -c 'gzip -d | ctr -n k8s.io images import --platform linux/amd64 -'
+ansible-playbook deploy-k8s.yml --vault-password-file "$VAULT_PASS" -e portal_version="$RELEASE_VERSION" -e odoo_url="$ODOO_URL" -e pgadmin_url="$PGADMIN_URL"
+ansible-playbook gateway.yml -e target=kubernetes
+'''
+                    }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            sh 'docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true'
+            junit allowEmptyResults: true, testResults: 'Projet final/realisation/reports/junit.xml'
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'Projet final/realisation/reports/*'
+        }
+    }
+}

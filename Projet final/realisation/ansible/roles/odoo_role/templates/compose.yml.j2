@@ -1,0 +1,44 @@
+services:
+  {{ postgres_service_name }}:
+    image: {{ postgres_image }}
+    container_name: {{ postgres_container_name }}
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: {{ vault_postgres_password | to_json }}
+    ports: ["5432:5432"]
+    volumes:
+      - "{{ postgres_bind_dir if postgres_bind_dir | length else 'pgdata' }}:/var/lib/postgresql/data"
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U odoo -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [backend]
+    restart: unless-stopped
+  {{ odoo_service_name }}:
+    image: {{ odoo_image }}
+    container_name: {{ odoo_container_name }}
+    environment:
+      HOST: {{ postgres_service_name }}
+      USER: odoo
+      PASSWORD: {{ vault_postgres_password | to_json }}
+      ODOO_ADMIN_PASSWORD: {{ vault_odoo_admin_password | to_json }}
+    ports: ["8069:8069"]
+    volumes:
+      - odoodata:/var/lib/odoo
+      - ./odoo.conf:/etc/odoo/odoo.conf:ro
+      - ./set_admin.py:/opt/set_admin.py:ro
+    depends_on:
+      {{ postgres_service_name }}:
+        condition: service_healthy
+    networks: [backend]
+    restart: unless-stopped
+networks:
+  backend:
+    name: {{ odoo_network }}
+volumes:
+  pgdata:
+    name: {{ postgres_volume }}
+  odoodata:
+    name: {{ odoo_volume }}

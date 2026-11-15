@@ -1,0 +1,62 @@
+---
+- name: Deployer IC GROUP dans Minikube
+  hosts: local
+  gather_facts: false
+  vars_files:
+    - vars/settings.yml
+    - vars/vault.yml
+  tasks:
+    - name: Namespace icgroup
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata: {name: icgroup, labels: {env: prod}}
+    - name: Secrets depuis Vault
+      kubernetes.core.k8s:
+        template: templates/k8s/secret.yml.j2
+      no_log: true
+    - name: Appliquer stockage et base de donnees
+      kubernetes.core.k8s:
+        src: ../k8s/10-infra.json
+    - name: Attendre PostgreSQL
+      ansible.builtin.command: kubectl -n icgroup rollout status statefulset/postgres --timeout=300s
+      changed_when: false
+    - name: Lire le Job initialisation
+      kubernetes.core.k8s_info:
+        api_version: batch/v1
+        kind: Job
+        namespace: icgroup
+        name: odoo-init
+      register: init_job
+    - name: Initialiser Odoo si necessaire
+      when: init_job.resources | length == 0
+      block:
+        - name: Creer le Job
+          kubernetes.core.k8s:
+            src: ../k8s/15-odoo-init.json
+        - name: Attendre initialisation et compte administrateur
+          ansible.builtin.command: kubectl -n icgroup wait --for=condition=complete job/odoo-init --timeout=600s
+          changed_when: false
+    - name: Appliquer les applications avec version et URLs
+      kubernetes.core.k8s:
+        definition: "{{ lookup('template', '../k8s/20-apps.json.j2') | from_json }}"
+    - name: Attendre les deployments
+      ansible.builtin.command: "kubectl -n icgroup rollout status deployment/{{ item }} --timeout=600s"
+      loop: [ic-webapp, odoo, pgadmin]
+      changed_when: false
+    - name: Lire les Pods du portail
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: icgroup
+        label_selectors: [app=ic-webapp]
+      register: portal_pods
+    - name: Verifier la version servie
+      kubernetes.core.k8s_exec:
+        namespace: icgroup
+        pod: "{{ portal_pods.resources[0].metadata.name }}"
+        command: >-
+          python -c "import urllib.request,json;
+          d=json.load(urllib.request.urlopen('http://ic-webapp:8080/api/info'));
+          assert d['version']=='{{ portal_version }}',d; print(d)"
+      changed_when: false

@@ -1,0 +1,35 @@
+---
+- name: Publier les applications vers Windows
+  hosts: local
+  gather_facts: false
+  vars:
+    target: docker
+  tasks:
+    - name: Construire le reverse proxy
+      ansible.builtin.command: docker build -t icgroup-gateway:1.0 ../gateway
+      changed_when: false
+    - name: Demarrer la passerelle vers le mode choisi
+      community.docker.docker_container:
+        name: icgroup-gateway
+        image: icgroup-gateway:1.0
+        restart_policy: unless-stopped
+        env:
+          PORTAL_UPSTREAM: "{{ 'minikube:31995' if target == 'kubernetes' else 'tp-ansible-web1-1:8095' }}"
+          PGADMIN_UPSTREAM: "{{ 'minikube:31550' if target == 'kubernetes' else 'tp-ansible-web1-1:5050' }}"
+          ODOO_UPSTREAM: "{{ 'minikube:31669' if target == 'kubernetes' else 'tp-ansible-db1-1:8069' }}"
+        networks:
+          - name: "{{ 'minikube' if target == 'kubernetes' else 'tp-ansible_default' }}"
+        published_ports:
+          - 127.0.0.1:8095:8095
+          - 127.0.0.1:5050:5050
+          - 127.0.0.1:8069:8069
+    - name: Verifier les trois applications depuis Jenkins
+      ansible.builtin.uri:
+        url: "http://icgroup-gateway:{{ item }}"
+        status_code: 200
+        follow_redirects: all
+      loop: ["8095/health", "5050/misc/ping", "8069/web/login"]
+      register: gateway_check
+      retries: 60
+      delay: 3
+      until: gateway_check.status == 200

@@ -1,0 +1,7 @@
+---
+- name: Installer Docker sur les serveurs du projet
+  hosts: managed
+  become: true
+  serial: 1
+  roles:
+    - docker

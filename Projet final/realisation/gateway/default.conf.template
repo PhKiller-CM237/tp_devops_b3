@@ -1,0 +1,12 @@
+server {
+    listen 8095;
+    location / { proxy_pass http://$PORTAL_UPSTREAM; proxy_set_header Host $http_host; }
+}
+server {
+    listen 5050;
+    location / { proxy_pass http://$PGADMIN_UPSTREAM; proxy_set_header Host $http_host; }
+}
+server {
+    listen 8069;
+    location / { proxy_pass http://$ODOO_UPSTREAM; proxy_set_header Host $http_host; }
+}

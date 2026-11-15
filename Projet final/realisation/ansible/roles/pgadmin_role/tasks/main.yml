@@ -1,0 +1,39 @@
+---
+- name: Creer le repertoire pgAdmin
+  ansible.builtin.file:
+    path: "{{ pgadmin_dir }}"
+    state: directory
+    mode: "0750"
+- name: Generer Compose pgAdmin
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ pgadmin_dir }}/docker-compose.yml"
+    mode: "0600"
+  no_log: true
+- name: Preconfigurer le serveur PostgreSQL Odoo
+  ansible.builtin.template:
+    src: servers.json.j2
+    dest: "{{ pgadmin_dir }}/servers.json"
+    mode: "0644"
+- name: Fournir le mot de passe PostgreSQL par fichier prive
+  ansible.builtin.copy:
+    content: "{{ hostvars['db1'].ansible_host }}:5432:*:odoo:{{ vault_postgres_password }}\n"
+    dest: "{{ pgadmin_dir }}/pgpass"
+    owner: "5050"
+    mode: "0400"
+  no_log: true
+- name: Demarrer pgAdmin
+  community.docker.docker_compose_v2:
+    project_src: "{{ pgadmin_dir }}"
+    project_name: icgroup-pgadmin
+    wait: true
+    wait_timeout: 180
+  no_log: true
+- name: Verifier pgAdmin
+  ansible.builtin.uri:
+    url: http://127.0.0.1:5050/misc/ping
+    status_code: 200
+  register: pgadmin_response
+  retries: 60
+  delay: 3
+  until: pgadmin_response.status == 200

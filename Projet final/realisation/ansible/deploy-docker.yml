@@ -1,0 +1,18 @@
+---
+- name: Deployer Odoo et PostgreSQL sur le serveur 3
+  hosts: odoo_servers
+  become: true
+  vars_files:
+    - vars/settings.yml
+    - vars/vault.yml
+  roles:
+    - odoo_role
+- name: Deployer pgAdmin et le portail sur le serveur 2
+  hosts: web_servers
+  become: true
+  vars_files:
+    - vars/settings.yml
+    - vars/vault.yml
+  roles:
+    - pgadmin_role
+    - portal_role

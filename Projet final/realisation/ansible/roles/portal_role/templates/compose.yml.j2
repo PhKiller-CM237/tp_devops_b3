@@ -1,0 +1,13 @@
+services:
+  {{ portal_service_name }}:
+    image: "{{ portal_image }}:{{ portal_version }}"
+    container_name: {{ portal_container_name }}
+    environment:
+      ODOO_URL: {{ odoo_url | to_json }}
+      PGADMIN_URL: {{ pgadmin_url | to_json }}
+    ports: ["8095:8080"]
+    networks: [frontend]
+    restart: unless-stopped
+networks:
+  frontend:
+    name: {{ portal_network }}

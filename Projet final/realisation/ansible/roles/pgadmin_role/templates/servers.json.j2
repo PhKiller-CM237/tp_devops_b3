@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Odoo PostgreSQL",
+      "Group": "IC GROUP",
+      "Host": "{{ hostvars['db1'].ansible_host }}",
+      "Port": 5432,
+      "MaintenanceDB": "legeni",
+      "Username": "odoo",
+      "SSLMode": "prefer",
+      "PassFile": "/var/lib/pgadmin/.pgpass"
+    }
+  }
+}

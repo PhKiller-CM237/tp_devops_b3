@@ -1,0 +1,148 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "odoo-init",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "backoffLimit": 1,
+        "template": {
+          "metadata": {
+            "labels": {
+              "env": "prod",
+              "app": "odoo-init"
+            }
+          },
+          "spec": {
+            "restartPolicy": "Never",
+            "initContainers": [
+              {
+                "name": "volume-owner",
+                "image": "busybox:1.36",
+                "command": [
+                  "sh",
+                  "-c",
+                  "chown -R 100:101 /var/lib/odoo"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/odoo"
+                  }
+                ]
+              }
+            ],
+            "containers": [
+              {
+                "name": "init",
+                "image": "odoo:18.0",
+                "command": [
+                  "sh",
+                  "-ec"
+                ],
+                "args": [
+                  "/entrypoint.sh odoo --stop-after-init -d legeni -i base --without-demo=all\n/entrypoint.sh odoo shell -d legeni --no-http < /opt/icgroup/set_admin.py\n"
+                ],
+                "env": [
+                  {
+                    "name": "HOST",
+                    "value": "postgres"
+                  },
+                  {
+                    "name": "USER",
+                    "value": "odoo"
+                  },
+                  {
+                    "name": "PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "icgroup-secrets",
+                        "key": "postgres-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "ODOO_ADMIN_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "icgroup-secrets",
+                        "key": "odoo-admin-password"
+                      }
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/odoo"
+                  },
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/odoo/odoo.conf",
+                    "subPath": "odoo.conf",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "script",
+                    "mountPath": "/opt/icgroup",
+                    "readOnly": true
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "200m",
+                    "memory": "256Mi"
+                  },
+                  "limits": {
+                    "cpu": "1",
+                    "memory": "768Mi"
+                  }
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "odoo-data"
+                }
+              },
+              {
+                "name": "config",
+                "secret": {
+                  "secretName": "icgroup-secrets",
+                  "items": [
+                    {
+                      "key": "odoo.conf",
+                      "path": "odoo.conf"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "script",
+                "configMap": {
+                  "name": "pgadmin-servers",
+                  "items": [
+                    {
+                      "key": "set_admin.py",
+                      "path": "set_admin.py"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

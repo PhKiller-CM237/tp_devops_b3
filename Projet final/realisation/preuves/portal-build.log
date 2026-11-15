@@ -1,0 +1,62 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 968B 0.1s done
+#1 DONE 0.2s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 3.2s
+
+#3 [internal] load .dockerignore
+#3 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 73B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 1.13kB 0.0s done
+#4 DONE 0.0s
+
+#5 [base 1/4] FROM docker.io/library/python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+#5 resolve docker.io/library/python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b 0.1s done
+#5 DONE 0.1s
+
+#6 [base 2/4] WORKDIR /opt
+#6 CACHED
+
+#7 [base 3/4] COPY requirements.txt .
+#7 CACHED
+
+#8 [base 4/4] RUN pip install --no-cache-dir -r requirements.txt
+#8 CACHED
+
+#9 [runtime 1/5] RUN useradd --create-home --uid 10001 appuser
+#9 DONE 1.3s
+
+#10 [runtime 2/5] COPY app.py entrypoint.sh releases.txt ./
+#10 DONE 0.3s
+
+#11 [runtime 3/5] COPY templates ./templates
+#11 DONE 0.4s
+
+#12 [runtime 4/5] COPY static ./static
+#12 DONE 0.3s
+
+#13 [runtime 5/5] RUN chmod 0755 /opt/entrypoint.sh
+#13 DONE 1.3s
+
+#14 exporting to image
+#14 exporting layers
+#14 exporting layers 3.3s done
+#14 exporting manifest sha256:d4bb768fe581f1961584d421596f1aeafd07a3dcdea90ee2be3dacfcad483f5e
+#14 exporting manifest sha256:d4bb768fe581f1961584d421596f1aeafd07a3dcdea90ee2be3dacfcad483f5e 1.1s done
+#14 exporting config sha256:f841f2d14104f1c49a254e0c80ac232db068a4909052cf10366965559d6f8a66
+#14 exporting config sha256:f841f2d14104f1c49a254e0c80ac232db068a4909052cf10366965559d6f8a66 0.2s done
+#14 exporting attestation manifest sha256:422c7c96ae1560a07d2acfb25afc4264e6a706286091a004aec8665062fcc588 0.1s done
+#14 exporting manifest list sha256:4b65588068a259ed56216f5ab0e263d0810e80daeb07be46a45060f572085f04
+#14 exporting manifest list sha256:4b65588068a259ed56216f5ab0e263d0810e80daeb07be46a45060f572085f04 0.1s done
+#14 naming to docker.io/library/legeni-academy:1.0 0.0s done
+#14 unpacking to docker.io/library/legeni-academy:1.0
+#14 unpacking to docker.io/library/legeni-academy:1.0 0.6s done
+#14 DONE 5.6s

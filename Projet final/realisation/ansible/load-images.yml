@@ -1,0 +1,68 @@
+---
+- name: Exporter les images necessaires a chaque serveur
+  hosts: local
+  gather_facts: false
+  vars_files: [vars/settings.yml]
+  tasks:
+    - name: Repertoire des archives
+      ansible.builtin.file:
+        path: /var/jenkins_home/.cache/icgroup
+        state: directory
+        mode: "0700"
+    - name: Exporter Odoo et PostgreSQL une seule fois
+      ansible.builtin.shell: |
+        set -o pipefail
+        docker save --platform linux/amd64 {{ odoo_image | quote }} {{ postgres_image | quote }} | gzip -1 > /var/jenkins_home/.cache/icgroup/odoo-platform.tar.gz
+      args:
+        executable: /bin/bash
+        creates: /var/jenkins_home/.cache/icgroup/odoo-platform.tar.gz
+    - name: Exporter pgAdmin une seule fois
+      ansible.builtin.shell: |
+        set -o pipefail
+        docker save --platform linux/amd64 {{ pgadmin_image | quote }} | gzip -1 > /var/jenkins_home/.cache/icgroup/pgadmin.tar.gz
+      args:
+        executable: /bin/bash
+        creates: /var/jenkins_home/.cache/icgroup/pgadmin.tar.gz
+    - name: Exporter le portail
+      ansible.builtin.shell: |
+        set -o pipefail
+        docker save --platform linux/amd64 {{ (portal_image ~ ':' ~ portal_version) | quote }} | gzip -1 > /var/jenkins_home/.cache/icgroup/portal.tar.gz
+      args: {executable: /bin/bash}
+      changed_when: false
+- name: Charger seulement les images utiles sur chaque cible
+  hosts: managed
+  become: true
+  serial: 1
+  vars:
+    platform_file: "{{ 'odoo-platform' if 'odoo_servers' in group_names else 'pgadmin' }}"
+  tasks:
+    - name: Copier l'archive plateforme ciblee
+      ansible.builtin.copy:
+        src: "/var/jenkins_home/.cache/icgroup/{{ platform_file }}.tar.gz"
+        dest: /var/tmp/icgroup-platform.tar.gz
+        mode: "0600"
+      register: platform_archive
+    - name: Lire le marqueur de chargement
+      ansible.builtin.stat:
+        path: /var/lib/icgroup-platform-loaded
+      register: platform_loaded
+    - name: Charger la plateforme si necessaire
+      ansible.builtin.command: docker load -i /var/tmp/icgroup-platform.tar.gz
+      when: platform_archive.changed or not platform_loaded.stat.exists
+      changed_when: true
+    - name: Memoriser le chargement
+      ansible.builtin.copy:
+        content: "loaded\n"
+        dest: /var/lib/icgroup-platform-loaded
+        mode: "0600"
+    - name: Copier le portail sur le serveur web
+      ansible.builtin.copy:
+        src: /var/jenkins_home/.cache/icgroup/portal.tar.gz
+        dest: /var/tmp/icgroup-portal.tar.gz
+        mode: "0600"
+      when: "'web_servers' in group_names"
+      register: portal_archive
+    - name: Charger le portail si modifie
+      ansible.builtin.command: docker load -i /var/tmp/icgroup-portal.tar.gz
+      when: "'web_servers' in group_names and portal_archive.changed"
+      changed_when: true

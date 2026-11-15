@@ -1,0 +1,71 @@
+---
+- name: Creer le repertoire Odoo
+  ansible.builtin.file:
+    path: "{{ odoo_dir }}"
+    state: directory
+    mode: "0750"
+- name: Generer Compose Odoo et PostgreSQL
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ odoo_dir }}/docker-compose.yml"
+    mode: "0600"
+  no_log: true
+- name: Generer la configuration privee Odoo
+  ansible.builtin.template:
+    src: odoo.conf.j2
+    dest: "{{ odoo_dir }}/odoo.conf"
+    owner: "{{ odoo_uid | default(100) }}"
+    mode: "0400"
+  no_log: true
+- name: Script de definition du compte administrateur
+  ansible.builtin.copy:
+    dest: "{{ odoo_dir }}/set_admin.py"
+    mode: "0644"
+    content: |
+      import os
+      env['res.users'].search([('login', '=', 'admin')], limit=1).write({'password': os.environ['ODOO_ADMIN_PASSWORD']})
+      env.cr.commit()
+- name: Demarrer PostgreSQL
+  community.docker.docker_compose_v2:
+    project_src: "{{ odoo_dir }}"
+    project_name: icgroup-odoo
+    services: ["{{ postgres_service_name }}"]
+    wait: true
+    wait_timeout: 180
+  no_log: true
+- name: Initialiser la base Odoo une seule fois
+  ansible.builtin.command:
+    argv: [docker, compose, -p, icgroup-odoo, -f, "{{ odoo_dir }}/docker-compose.yml", run, --rm, --no-deps, "{{ odoo_service_name }}", --stop-after-init, -d, legeni, -i, base, "--without-demo=all"]
+    creates: "{{ odoo_dir }}/.initialized"
+  no_log: true
+- name: Memoriser initialisation de la base
+  ansible.builtin.copy:
+    content: "initialized\n"
+    dest: "{{ odoo_dir }}/.initialized"
+    mode: "0600"
+- name: Demarrer Odoo
+  community.docker.docker_compose_v2:
+    project_src: "{{ odoo_dir }}"
+    project_name: icgroup-odoo
+    wait: true
+    wait_timeout: 180
+  no_log: true
+- name: Configurer le mot de passe administrateur une seule fois
+  ansible.builtin.shell: >-
+    docker exec -i {{ odoo_container_name }} /entrypoint.sh odoo shell -d legeni --no-http < {{ odoo_dir }}/set_admin.py
+  args:
+    creates: "{{ odoo_dir }}/.admin-initialized"
+  no_log: true
+- name: Memoriser configuration administrateur
+  ansible.builtin.copy:
+    content: "initialized\n"
+    dest: "{{ odoo_dir }}/.admin-initialized"
+    mode: "0600"
+- name: Verifier Odoo
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8069/web/login
+    status_code: 200
+  register: odoo_response
+  retries: 60
+  delay: 3
+  until: odoo_response.status == 200

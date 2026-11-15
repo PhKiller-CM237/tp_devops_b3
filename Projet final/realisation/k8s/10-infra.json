@@ -1,0 +1,285 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "icgroup-postgres-data",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "capacity": {
+          "storage": "2Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "icgroup-manual",
+        "hostPath": {
+          "path": "/data/icgroup/postgres-data",
+          "type": "DirectoryOrCreate"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "postgres-data",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        },
+        "storageClassName": "icgroup-manual",
+        "volumeName": "icgroup-postgres-data"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "icgroup-odoo-data",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "capacity": {
+          "storage": "2Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "icgroup-manual",
+        "hostPath": {
+          "path": "/data/icgroup/odoo-data",
+          "type": "DirectoryOrCreate"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "odoo-data",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        },
+        "storageClassName": "icgroup-manual",
+        "volumeName": "icgroup-odoo-data"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "icgroup-pgadmin-data",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "icgroup-manual",
+        "hostPath": {
+          "path": "/data/icgroup/pgadmin-data",
+          "type": "DirectoryOrCreate"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "pgadmin-data",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        },
+        "storageClassName": "icgroup-manual",
+        "volumeName": "icgroup-pgadmin-data"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "postgres",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "selector": {
+          "app": "postgres"
+        },
+        "ports": [
+          {
+            "port": 5432,
+            "targetPort": 5432
+          }
+        ],
+        "clusterIP": "None"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "name": "postgres",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "spec": {
+        "serviceName": "postgres",
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "postgres"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "postgres",
+              "env": "prod"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "postgres",
+                "image": "postgres:16-alpine",
+                "env": [
+                  {
+                    "name": "POSTGRES_USER",
+                    "value": "odoo"
+                  },
+                  {
+                    "name": "POSTGRES_DB",
+                    "value": "postgres"
+                  },
+                  {
+                    "name": "POSTGRES_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "icgroup-secrets",
+                        "key": "postgres-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "PGDATA",
+                    "value": "/var/lib/postgresql/data/pgdata"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 5432
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/postgresql/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "exec": {
+                    "command": [
+                      "pg_isready",
+                      "-U",
+                      "odoo",
+                      "-d",
+                      "postgres"
+                    ]
+                  },
+                  "periodSeconds": 5
+                },
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "500m",
+                    "memory": "384Mi"
+                  }
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "postgres-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "pgadmin-servers",
+        "namespace": "icgroup",
+        "labels": {
+          "env": "prod"
+        }
+      },
+      "data": {
+        "servers.json": "{\"Servers\": {\"1\": {\"Name\": \"Odoo PostgreSQL\", \"Group\": \"IC GROUP\", \"Host\": \"postgres\", \"Port\": 5432, \"MaintenanceDB\": \"legeni\", \"Username\": \"odoo\", \"SSLMode\": \"prefer\", \"PassFile\": \"/var/lib/pgadmin/.pgpass\"}}}",
+        "set_admin.py": "import os\nenv['res.users'].search([('login', '=', 'admin')], limit=1).write({'password': os.environ['ODOO_ADMIN_PASSWORD']})\nenv.cr.commit()\n"
+      }
+    }
+  ]
+}
