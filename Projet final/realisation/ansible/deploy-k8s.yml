@@ -40,7 +40,7 @@
           changed_when: false
     - name: Appliquer les applications avec version et URLs
       kubernetes.core.k8s:
-        definition: "{{ lookup('template', '../k8s/20-apps.json.j2') | from_json }}"
+        template: ../k8s/20-apps.json.j2
     - name: Attendre les deployments
       ansible.builtin.command: "kubectl -n icgroup rollout status deployment/{{ item }} --timeout=600s"
       loop: [ic-webapp, odoo, pgadmin]

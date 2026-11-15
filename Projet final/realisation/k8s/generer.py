@@ -33,7 +33,7 @@ infra=[]
 for name,size in [("postgres-data","2Gi"),("odoo-data","2Gi"),("pgadmin-data","1Gi")]:infra+=pvc(name,size)
 postgres=obj("StatefulSet","postgres",{"serviceName":"postgres","replicas":1,"selector":{"matchLabels":{"app":"postgres"}},"template":{"metadata":{"labels":{"app":"postgres","env":"prod"}},"spec":{"containers":[{"name":"postgres","image":"postgres:16-alpine","env":[{"name":"POSTGRES_USER","value":"odoo"},{"name":"POSTGRES_DB","value":"postgres"},envsecret("POSTGRES_PASSWORD","postgres-password"),{"name":"PGDATA","value":"/var/lib/postgresql/data/pgdata"}],"ports":[{"containerPort":5432}],"volumeMounts":[{"name":"data","mountPath":"/var/lib/postgresql/data"}],"readinessProbe":{"exec":{"command":["pg_isready","-U","odoo","-d","postgres"]},"periodSeconds":5},"resources":{"requests":{"cpu":"100m","memory":"128Mi"},"limits":{"cpu":"500m","memory":"384Mi"}}}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"postgres-data"}}]}}},"apps/v1")
 infra+=[svc("postgres",5432,headless=True),postgres]
-servers={"Servers":{"1":{"Name":"Odoo PostgreSQL","Group":"IC GROUP","Host":"postgres","Port":5432,"MaintenanceDB":"legeni","Username":"odoo","SSLMode":"prefer","PassFile":"/var/lib/pgadmin/.pgpass"}}}
+servers={"Servers":{"1":{"Name":"Odoo PostgreSQL","Group":"IC GROUP","Host":"postgres","Port":5432,"MaintenanceDB":"legeni","Username":"odoo","SSLMode":"prefer","PassFile":"/var/lib/pgadmin/storage/admin_example.com/.pgpass"}}}
 cm=obj("ConfigMap","pgadmin-servers")
 cm["data"]={"servers.json":json.dumps(servers),"set_admin.py":"import os\nenv['res.users'].search([('login', '=', 'admin')], limit=1).write({'password': os.environ['ODOO_ADMIN_PASSWORD']})\nenv.cr.commit()\n"}
 infra.append(cm)

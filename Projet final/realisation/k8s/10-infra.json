@@ -277,7 +277,7 @@
         }
       },
       "data": {
-        "servers.json": "{\"Servers\": {\"1\": {\"Name\": \"Odoo PostgreSQL\", \"Group\": \"IC GROUP\", \"Host\": \"postgres\", \"Port\": 5432, \"MaintenanceDB\": \"legeni\", \"Username\": \"odoo\", \"SSLMode\": \"prefer\", \"PassFile\": \"/var/lib/pgadmin/.pgpass\"}}}",
+        "servers.json": "{\"Servers\": {\"1\": {\"Name\": \"Odoo PostgreSQL\", \"Group\": \"IC GROUP\", \"Host\": \"postgres\", \"Port\": 5432, \"MaintenanceDB\": \"legeni\", \"Username\": \"odoo\", \"SSLMode\": \"prefer\", \"PassFile\": \"/var/lib/pgadmin/storage/admin_example.com/.pgpass\"}}}",
         "set_admin.py": "import os\nenv['res.users'].search([('login', '=', 'admin')], limit=1).write({'password': os.environ['ODOO_ADMIN_PASSWORD']})\nenv.cr.commit()\n"
       }
     }

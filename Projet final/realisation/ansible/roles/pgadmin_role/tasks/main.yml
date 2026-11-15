@@ -17,7 +17,7 @@
     mode: "0644"
 - name: Fournir le mot de passe PostgreSQL par fichier prive
   ansible.builtin.copy:
-    content: "{{ hostvars['db1'].ansible_host }}:5432:*:odoo:{{ vault_postgres_password }}\n"
+    content: "{{ hostvars['db1'].ansible_facts.default_ipv4.address }}:5432:*:odoo:{{ vault_postgres_password }}\n"
     dest: "{{ pgadmin_dir }}/pgpass"
     owner: "5050"
     mode: "0400"

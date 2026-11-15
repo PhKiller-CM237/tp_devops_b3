@@ -104,7 +104,13 @@ ansible-playbook gateway.yml -e target=docker
                     dir('Projet final/realisation/ansible') {
                         sh '''#!/bin/bash
 set -euo pipefail
-docker save --platform linux/amd64 odoo:18.0 dpage/pgadmin4:9.19 postgres:16-alpine "$IMAGE:$RELEASE_VERSION" | gzip -1 | docker exec -i minikube sh -c 'gzip -d | ctr -n k8s.io images import --platform linux/amd64 -'
+missing=()
+for image in odoo:18.0 dpage/pgadmin4:9.19 postgres:16-alpine "$IMAGE:$RELEASE_VERSION"; do
+ if ! docker exec minikube crictl inspecti "$image" >/dev/null 2>&1; then missing+=("$image"); fi
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+ docker save --platform linux/amd64 "${missing[@]}" | gzip -1 | docker exec -i minikube sh -c 'gzip -d | ctr -n k8s.io images import --platform linux/amd64 -'
+fi
 ansible-playbook deploy-k8s.yml --vault-password-file "$VAULT_PASS" -e portal_version="$RELEASE_VERSION" -e odoo_url="$ODOO_URL" -e pgadmin_url="$PGADMIN_URL"
 ansible-playbook gateway.yml -e target=kubernetes
 '''
